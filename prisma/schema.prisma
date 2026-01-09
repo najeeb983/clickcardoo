@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Account {
+  id               String         @id @default(cuid())
+  name             String
+  email            String         @unique
+  passwordHash     String         @map("password_hash")
+  phone            String?
+  role             UserRole       @default(MANAGER)
+  twoFactorEnabled Boolean        @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?        @map("two_factor_secret")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  active           Boolean        @default(true)
+  bankCards        BankCard[]
+  bookings         Booking[]
+  excessActions    ExcessAction[]
+  finances         Finance[]
+  loginAttempts    LoginAttempt[]
+  notifications    Notification[]
+
+  @@map("Account")
+}
+
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  accountId  String   @map("account_id")
+  ipAddress  String   @map("ip_address")
+  successful Boolean
+  createdAt  DateTime @default(now()) @map("created_at")
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@map("LoginAttempt")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  accountId       String        @map("account_id")
+  contractId      String        @map("contract_id")
+  bookingId       String?       @map("booking_id")
+  insuranceAmount Decimal       @map("insurance_amount") @db.Decimal(10, 2)
+  rentalDays      Int           @map("rental_days")
+  rentalType      String        @map("rental_type")
+  dailyRate       Decimal       @map("daily_rate") @db.Decimal(10, 2)
+  status          BookingStatus @default(PENDING)
+  startDate       DateTime      @map("start_date")
+  endDate         DateTime      @map("end_date")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  excesses        Excess[]
+  finances        Finance[]
+
+  @@index([accountId, status])
+  @@index([startDate, endDate])
+  @@map("Booking")
+}
+
+model Excess {
+  id                       String         @id @default(cuid())
+  bookingId                String         @map("booking_id")
+  type                     String
+  amount                   Decimal        @db.Decimal(10, 2)
+  description              String?
+  notes                    String?
+  imageIdentity            String?        @map("image_identity")
+  imageContract            String?        @map("image_contract")
+  imageLicense             String?        @map("image_license")
+  imageInvoice             String?        @map("image_invoice")
+  imageCompanySubscription String?        @map("image_company_subscription")
+  imageEvidence            String[]       @map("image_evidence")
+  createdAt                DateTime       @default(now()) @map("created_at")
+  updatedAt                DateTime       @updatedAt @map("updated_at")
+  status                   ExcessStatus   @default(NEED_UPDATE) @map("status")
+  booking                  Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actions                  ExcessAction[]
+  finances                 Finance[]
+
+  @@index([bookingId])
+  @@map("Excess")
+}
+
+model ExcessAction {
+  id          String   @id @default(cuid())
+  excessId    String   @map("excess_id")
+  accountId   String   @map("account_id")
+  actionType  String   @map("action_type")
+  description String
+  details     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  excess      Excess   @relation(fields: [excessId], references: [id], onDelete: Cascade)
+
+  @@index([excessId, createdAt])
+  @@index([accountId])
+  @@map("ExcessAction")
+}
+
+model Finance {
+  id          String      @id @default(cuid())
+  accountId   String      @map("account_id")
+  bookingId   String?     @map("booking_id")
+  excessId    String?     @map("excess_id")
+  amount      Decimal     @db.Decimal(10, 2)
+  type        FinanceType
+  description String
+  reference   String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  bankCardId  String?     @map("bank_card_id")
+  account     Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bankCard    BankCard?   @relation(fields: [bankCardId], references: [id])
+  booking     Booking?    @relation(fields: [bookingId], references: [id])
+  excess      Excess?     @relation(fields: [excessId], references: [id])
+
+  @@index([accountId, createdAt])
+  @@index([bookingId])
+  @@index([bankCardId])
+  @@map("Finance")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  accountId String   @map("account_id")
+  type      String
+  title     String
+  message   String
+  bookingId String?  @map("booking_id")
+  excessId  String?  @map("excess_id")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([isRead])
+  @@map("Notification")
+}
+
+model BankCard {
+  id             String    @id @default(cuid())
+  accountId      String    @map("account_id")
+  cardNumber     String    @map("card_number")
+  cardHolderName String    @map("card_holder_name")
+  expiryDate     String    @map("expiry_date")
+  cvv            String?
+  balance        Decimal   @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  finances       Finance[]
+
+  @@index([accountId])
+  @@map("BankCard")
+}
+
+enum BookingStatus {
+  PENDING
+  PAID
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum FinanceType {
+  CREDIT
+  DEBIT
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  CUSTOMER
+}
+
+enum ExcessStatus {
+  NEED_UPDATE
+  APPROVED
+  DECLINED
+}
